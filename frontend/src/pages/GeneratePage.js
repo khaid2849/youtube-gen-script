@@ -43,8 +43,10 @@ const GeneratePage = () => {
 
   const checkStatus = async () => {
     try {
+      console.log('Checking status for task:', taskId);
       const response = await transcriptionAPI.getStatus(taskId);
       const data = response.data;
+      console.log('Status response:', data);
       
       setProgress(data.progress);
       setStatusMessage(data.message);
@@ -52,6 +54,7 @@ const GeneratePage = () => {
       if (data.status === 'completed') {
         setStatus('completed');
         setScriptId(data.script_id);
+        console.log('Fetching script with ID:', data.script_id);
         await fetchScript(data.script_id);
         toast.success('Script generated successfully!');
       } else if (data.status === 'failed') {
@@ -66,9 +69,22 @@ const GeneratePage = () => {
   const fetchScript = async (id) => {
     try {
       const response = await scriptsAPI.getById(id);
+      console.log('Script data:', response.data); // Debug log
       setScriptData(response.data);
     } catch (error) {
+      console.error('Error fetching script:', error);
       toast.error('Failed to fetch script');
+      
+      // If fetching fails, try to get basic data from the task result
+      if (scriptId) {
+        setScriptData({
+          id: scriptId,
+          video_url: url,
+          status: 'completed',
+          formatted_script: 'Script generation completed. Please refresh to see the content.',
+          video_title: 'Processing Complete'
+        });
+      }
     }
   };
 

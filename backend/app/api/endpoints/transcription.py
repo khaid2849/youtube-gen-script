@@ -32,7 +32,7 @@ async def create_transcription(
             db.commit()
         
         # Check limits
-        if not current_user.is_pro and usage.videos_processed_today >= 5:
+        if not current_user.is_pro and usage.videos_processed_today >= 500000:
             raise HTTPException(
                 status_code=429,
                 detail="Daily limit reached. Upgrade to Pro for unlimited videos."

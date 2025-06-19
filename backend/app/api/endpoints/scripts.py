@@ -81,7 +81,21 @@ def get_script(
     if script.user_id and (not current_user or script.user_id != current_user.id):
         raise HTTPException(status_code=403, detail="Access denied")
     
-    return script
+    # Ensure all fields are included
+    return {
+        "id": script.id,
+        "user_id": script.user_id,
+        "video_url": script.video_url,
+        "video_title": script.video_title,
+        "video_duration": script.video_duration,
+        "transcript_text": script.transcript_text,
+        "formatted_script": script.formatted_script,
+        "file_path": script.file_path,
+        "status": script.status,
+        "error_message": script.error_message,
+        "created_at": script.created_at,
+        "completed_at": script.completed_at
+    }
 
 @router.get("/{script_id}/download")
 def download_script(
