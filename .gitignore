@@ -97,6 +97,8 @@ __pypackages__/
 # Celery stuff
 celerybeat-schedule
 celerybeat.pid
+celerybeat-schedule.*
+.celery_beat_schedule
 
 # SageMath parsed files
 *.sage.py
@@ -109,6 +111,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+backend/venv/
 
 # Spyder project settings
 .spyderproject
@@ -137,6 +140,7 @@ yarn-error.log*
 # React build files
 frontend/build/
 frontend/dist/
+build/
 
 # Package files
 *.tgz
@@ -154,16 +158,16 @@ coverage/
 # nyc test coverage
 .nyc_output
 
-# Grunt intermediate storage (https://gruntjs.com/creating-plugins#storing-task-files)
+# Grunt intermediate storage
 .grunt
 
-# Bower dependency directory (https://bower.io/)
+# Bower dependency directory
 bower_components
 
 # node-waf configuration
 .lock-wscript
 
-# Compiled binary addons (https://nodejs.org/api/addons.html)
+# Compiled binary addons
 build/Release
 
 # Dependency directories
@@ -184,9 +188,6 @@ typings/
 # Optional REPL history
 .node_repl_history
 
-# Output of 'npm pack'
-*.tgz
-
 # Yarn Integrity file
 .yarn-integrity
 
@@ -196,7 +197,7 @@ typings/
 .env.test.local
 .env.production.local
 
-# parcel-bundler cache (https://parceljs.org/)
+# parcel-bundler cache
 .cache
 .parcel-cache
 
@@ -205,15 +206,10 @@ typings/
 
 # Nuxt.js build / generate output
 .nuxt
-dist
 
 # Storybook build outputs
 .out
 .storybook-out
-
-# Temporary folders
-tmp/
-temp/
 
 # Logs
 logs
@@ -238,24 +234,31 @@ Thumbs.db
 *.swp
 *.swo
 *~
+*.sublime-*
 
 # Database files
 *.sqlite
 *.sqlite3
 *.db
 
-# Audio/Video files (temporary processing files)
+# Project-specific: Audio/Video files (temporary processing files)
 *.mp3
 *.mp4
 *.wav
 *.m4a
 *.webm
 *.ogg
+*.aac
+*.flac
 
-# Generated script files
-scripts/
+# Project-specific: Generated and temporary files
 generated_scripts/
+backend/generated_scripts/
 temp_audio/
+backend/temp_audio/
+scripts/
+transcripts/
+downloads/
 
 # AWS credentials
 .aws/
@@ -270,10 +273,14 @@ docker-compose.override.yml
 *.pt
 *.pth
 *.onnx
+*.pkl
+*.joblib
 models/
+model_cache/
 
 # Redis dump files
 dump.rdb
+*.rdb
 
 # Backup files
 *.bak
@@ -282,12 +289,72 @@ dump.rdb
 # Local configuration files
 config.local.py
 settings.local.py
+local_settings.py
 
 # Certificate files
 *.pem
 *.key
 *.crt
+*.p12
 
-# Application specific
-celerybeat-schedule.*
-.celery_beat_schedule
+# Database migration files (optional - uncomment if you want to ignore)
+# backend/alembic/versions/*.py
+
+# FastAPI specific
+.pytest_cache/
+instance/
+
+# YouTube DL cache
+.cache/youtube-dl/
+.cache/yt-dlp/
+
+# FFmpeg temporary files
+ffmpeg_*
+*.tmp
+
+# Text processing temporary files
+*.txt.tmp
+*.json.tmp
+
+# Machine learning model files
+*.model
+*.bin
+*.h5
+*.keras
+
+# Large data files
+*.csv
+*.json
+data/
+datasets/
+
+# API keys and secrets (additional security)
+api_keys.py
+secrets.py
+.secrets/
+
+# Testing
+.coverage.*
+test_results/
+pytest_cache/
+
+# Monitoring and profiling
+.prof
+*.prof
+
+# Package lock files for development (uncomment if desired)
+# frontend/package-lock.json
+
+# Development database
+dev.db
+development.db
+test.db
+
+# Temporary directories
+tmp/
+temp/
+temporary/
+
+# System files
+.directory
+desktop.ini
