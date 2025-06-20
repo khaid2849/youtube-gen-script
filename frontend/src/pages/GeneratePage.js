@@ -9,7 +9,7 @@ import toast from 'react-hot-toast';
 const GeneratePage = () => {
   const location = useLocation();
   const [url, setUrl] = useState(location.state?.url || '');
-  const [status, setStatus] = useState('idle'); // idle, processing, completed, failed
+  const [status, setStatus] = useState('idle');
   const [taskId, setTaskId] = useState(null);
   const [scriptId, setScriptId] = useState(null);
   const [scriptData, setScriptData] = useState(null);
@@ -20,8 +20,7 @@ const GeneratePage = () => {
     if (taskId && status === 'processing') {
       const interval = setInterval(() => {
         checkStatus();
-      }, 2000); // Check every 2 seconds
-
+      }, 2000);
       return () => clearInterval(interval);
     }
   }, [taskId, status]);
@@ -31,9 +30,14 @@ const GeneratePage = () => {
       setStatus('processing');
       setProgress(0);
       setStatusMessage('Starting transcription...');
+      setUrl(videoUrl);
       
       const response = await transcriptionAPI.create({ video_url: videoUrl });
       setTaskId(response.data.task_id);
+      
+      if (response.data.script_id) {
+        setScriptId(response.data.script_id);
+      }
       
     } catch (error) {
       setStatus('failed');
@@ -43,19 +47,28 @@ const GeneratePage = () => {
 
   const checkStatus = async () => {
     try {
-      console.log('Checking status for task:', taskId);
       const response = await transcriptionAPI.getStatus(taskId);
       const data = response.data;
-      console.log('Status response:', data);
       
       setProgress(data.progress);
       setStatusMessage(data.message);
       
-      if (data.status === 'completed') {
-        setStatus('completed');
+      if (data.script_id && !scriptId) {
         setScriptId(data.script_id);
-        console.log('Fetching script with ID:', data.script_id);
-        await fetchScript(data.script_id);
+      }
+      
+      if (data.status === 'completed') {
+        const finalScriptId = data.script_id || scriptId;
+        
+        if (!finalScriptId) {
+          console.error('Script ID is missing from response');
+          toast.error('Script generation completed but ID is missing');
+          setStatus('failed');
+          return;
+        }
+        
+        setStatus('completed');
+        await fetchScript(finalScriptId);
         toast.success('Script generated successfully!');
       } else if (data.status === 'failed') {
         setStatus('failed');
@@ -69,13 +82,11 @@ const GeneratePage = () => {
   const fetchScript = async (id) => {
     try {
       const response = await scriptsAPI.getById(id);
-      console.log('Script data:', response.data); // Debug log
       setScriptData(response.data);
     } catch (error) {
       console.error('Error fetching script:', error);
       toast.error('Failed to fetch script');
       
-      // If fetching fails, try to get basic data from the task result
       if (scriptId) {
         setScriptData({
           id: scriptId,
@@ -99,49 +110,70 @@ const GeneratePage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Generate Your Script</h1>
-          <p className="mt-2 text-gray-600">
-            Processing your YouTube video with AI-powered transcription
-          </p>
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+      {/* Header Section */}
+      <div className="bg-white shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="text-center">
+            <h1 className="text-4xl font-bold text-gray-900 mb-4">
+              {status === 'completed' ? 'Your Script is Ready!' : 'Generate Your Script'}
+            </h1>
+            <p className="text-lg text-gray-600 max-w-3xl mx-auto">
+              {status === 'completed' 
+                ? 'Your video has been successfully transcribed. Download or copy your script below.'
+                : 'Transform any YouTube video into a professionally formatted transcript with timestamps.'}
+            </p>
+          </div>
         </div>
+      </div>
 
+      {/* Main Content */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         {status === 'idle' && (
-          <URLInput 
-            initialUrl={url}
-            onSubmit={handleSubmit}
-          />
+          <div className="max-w-3xl mx-auto">
+            <URLInput 
+              initialUrl={url}
+              onSubmit={handleSubmit}
+            />
+          </div>
         )}
 
         {status === 'processing' && (
-          <ProcessingStatus 
-            progress={progress}
-            message={statusMessage}
-          />
+          <div className="max-w-3xl mx-auto">
+            <ProcessingStatus 
+              progress={progress}
+              message={statusMessage}
+            />
+          </div>
         )}
 
         {status === 'completed' && scriptData && (
           <ScriptDisplay 
             script={scriptData}
             onNewScript={handleReset}
+            videoUrl={url}
           />
         )}
 
         {status === 'failed' && (
-          <div className="bg-white rounded-lg shadow p-8 text-center">
-            <div className="text-red-500 text-5xl mb-4">❌</div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">
-              Transcription Failed
-            </h3>
-            <p className="text-gray-600 mb-6">{statusMessage}</p>
-            <button
-              onClick={handleReset}
-              className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition duration-200"
-            >
-              Try Again
-            </button>
+          <div className="max-w-md mx-auto">
+            <div className="bg-white rounded-2xl shadow-xl p-8 text-center">
+              <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                <svg className="w-10 h-10 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </div>
+              <h3 className="text-2xl font-bold text-gray-900 mb-3">
+                Transcription Failed
+              </h3>
+              <p className="text-gray-600 mb-8">{statusMessage || 'Something went wrong. Please try again.'}</p>
+              <button
+                onClick={handleReset}
+                className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-8 py-3 rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-200 font-medium shadow-lg hover:shadow-xl"
+              >
+                Try Again
+              </button>
+            </div>
           </div>
         )}
       </div>
