@@ -10,7 +10,7 @@ python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 celery==5.3.4
 redis==5.0.1
-yt-dlp==2023.11.16
+yt-dlp==2025.6.9
 openai-whisper==20231117
 pydub==0.25.1
 pandas==2.1.3

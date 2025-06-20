@@ -3,6 +3,8 @@ from .celery_app import celery_app
 import os
 import time
 import traceback
+import json
+from datetime import datetime
 
 @celery_app.task(bind=True, name='process_youtube_video')
 def process_youtube_video(self, script_id: int, video_url: str, user_id: int = None):
@@ -14,22 +16,46 @@ def process_youtube_video(self, script_id: int, video_url: str, user_id: int = N
     from ..core.youtube_downloader import YouTubeDownloader
     from ..core.transcriber import WhisperTranscriber
     from ..core.formatter import ScriptFormatter
-    from datetime import datetime
+    from ..core.redis_client import get_redis_client
     
     db = SessionLocal()
     downloader = YouTubeDownloader()
     transcriber = WhisperTranscriber()
     formatter = ScriptFormatter()
     audio_path = None
+    redis_client = get_redis_client()
+    
+    # Store task progress in Redis
+    def update_task_status(progress, status, extra_data=None):
+        task_data = {
+            'task_id': self.request.id,
+            'script_id': script_id,
+            'progress': progress,
+            'status': status,
+            'state': 'PROGRESS' if progress < 100 else 'SUCCESS',
+            'timestamp': datetime.utcnow().isoformat()
+        }
+        if extra_data:
+            task_data.update(extra_data)
+        
+        # Store in Redis with task ID as key
+        redis_client.set(
+            f"task_result:{self.request.id}", 
+            json.dumps(task_data), 
+            ex=3600  # Expire in 1 hour
+        )
+        
+        # Also update Celery state
+        self.update_state(
+            state='PROGRESS' if progress < 100 else 'SUCCESS',
+            meta={'current': progress, 'total': 100, 'status': status}
+        )
     
     try:
         print(f"Starting to process video: {video_url}")
         
         # Update task state - Extracting info
-        self.update_state(
-            state='PROGRESS',
-            meta={'current': 10, 'total': 100, 'status': 'Extracting video information...'}
-        )
+        update_task_status(10, 'Extracting video information...')
         
         # Get script record
         script = db.query(Script).filter(Script.id == script_id).first()
@@ -41,10 +67,7 @@ def process_youtube_video(self, script_id: int, video_url: str, user_id: int = N
         db.commit()
         
         # Step 1: Extract video info and download audio
-        self.update_state(
-            state='PROGRESS',
-            meta={'current': 20, 'total': 100, 'status': 'Downloading audio...'}
-        )
+        update_task_status(20, 'Downloading audio...')
         
         print(f"Downloading audio from: {video_url}")
         audio_path, video_info = downloader.download_audio(video_url)
@@ -56,20 +79,14 @@ def process_youtube_video(self, script_id: int, video_url: str, user_id: int = N
         db.commit()
         
         # Step 2: Transcribe audio
-        self.update_state(
-            state='PROGRESS',
-            meta={'current': 50, 'total': 100, 'status': 'Transcribing audio... This may take a few minutes...'}
-        )
+        update_task_status(50, 'Transcribing audio... This may take a few minutes...')
         
         print(f"Starting transcription of audio file: {audio_path}")
         transcript_data = transcriber.transcribe_audio(audio_path)
         print(f"Transcription completed. Found {len(transcript_data['segments'])} segments")
         
         # Step 3: Format and save script
-        self.update_state(
-            state='PROGRESS',
-            meta={'current': 80, 'total': 100, 'status': 'Formatting script...'}
-        )
+        update_task_status(80, 'Formatting script...')
         
         formatted_script = transcriber.format_transcript(
             transcript_data['segments'], 
@@ -97,14 +114,15 @@ def process_youtube_video(self, script_id: int, video_url: str, user_id: int = N
             downloader.cleanup_audio(audio_path)
             print(f"Cleaned up audio file: {audio_path}")
         
-        # Final update
-        self.update_state(
-            state='SUCCESS',
-            meta={'current': 100, 'total': 100, 'status': 'Script generated successfully!'}
-        )
+        # Final update with success
+        update_task_status(100, 'Script generated successfully!', {
+            'file_path': file_path,
+            'completed': True
+        })
         
         print(f"Successfully processed video: {video_url}")
         
+        # Return result (even though we're storing in Redis)
         return {
             'script_id': script_id,
             'status': 'completed',
@@ -127,6 +145,22 @@ def process_youtube_video(self, script_id: int, video_url: str, user_id: int = N
         except Exception as db_error:
             print(f"Failed to update database: {str(db_error)}")
             db.rollback()
+        
+        # Store error in Redis
+        error_data = {
+            'task_id': self.request.id,
+            'script_id': script_id,
+            'progress': 0,
+            'status': f'Failed: {str(e)}',
+            'state': 'FAILURE',
+            'error': str(e),
+            'timestamp': datetime.utcnow().isoformat()
+        }
+        redis_client.set(
+            f"task_result:{self.request.id}", 
+            json.dumps(error_data), 
+            ex=3600
+        )
         
         # Cleanup
         if audio_path and os.path.exists(audio_path):
@@ -151,11 +185,3 @@ def process_youtube_video(self, script_id: int, video_url: str, user_id: int = N
         
     finally:
         db.close()
-
-
-# Test task for verification
-@celery_app.task(name='test_task')
-def test_task(x, y):
-    """Simple test task"""
-    print(f"Test task called with {x} and {y}")
-    return x + y

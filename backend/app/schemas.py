@@ -80,6 +80,7 @@ class ProcessingStatus(BaseModel):
     status: str
     progress: int
     message: str
+    script_id: Optional[int] = None
 
 class DashboardData(BaseModel):
     scripts_generated: int
