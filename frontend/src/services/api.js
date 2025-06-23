@@ -40,16 +40,20 @@ api.interceptors.response.use(
 // Auth API
 export const authAPI = {
   register: (data) => api.post("/users/register", data),
-  login: (data) => {
-    return api.post("/users/login", data, {
+  login: (data) =>
+    api.post("/users/login", data, {
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
       },
-    });
-  },
+    }),
   getProfile: () => api.get("/users/me"),
+  updateProfile: (data) => api.put("/users/profile", data),
   getUsage: () => api.get("/users/usage"),
+  getStats: () => api.get("/users/stats"),
   upgradeToPro: () => api.post("/users/upgrade-to-pro"),
+  changePassword: (data) => api.post("/users/change-password", data),
+  deleteAccount: (password) =>
+    api.delete("/users/account", { data: { password } }),
 };
 
 // Transcription API
@@ -60,15 +64,62 @@ export const transcriptionAPI = {
 
 // Scripts API
 export const scriptsAPI = {
+  // Get paginated scripts with filters
   getList: (params) => api.get("/scripts/", { params }),
+
+  // Get all scripts (no pagination)
+  getAll: () => api.get("/scripts/all"),
+
+  // Get single script
   getById: (id) => api.get(`/scripts/${id}`),
+
+  // Download single script
   download: (id, format = "txt") =>
     api.get(`/scripts/${id}/download`, {
       params: { format },
       responseType: "blob",
     }),
+
+  // Delete script
   delete: (id) => api.delete(`/scripts/${id}`),
+
+  // Get dashboard data
   getDashboard: () => api.get("/scripts/dashboard"),
+
+  // Export multiple scripts
+  export: (data) =>
+    api.post("/scripts/export", data, {
+      responseType: "blob",
+    }),
+
+  // Regenerate failed script
+  regenerate: (id) => api.post(`/scripts/${id}/regenerate`),
+};
+
+// Helper function to download blob
+export const downloadBlob = (blob, filename) => {
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+};
+
+// Helper function to get filename from response headers
+export const getFilenameFromResponse = (response) => {
+  const contentDisposition = response.headers["content-disposition"];
+  if (contentDisposition) {
+    const filenameMatch = contentDisposition.match(
+      /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/
+    );
+    if (filenameMatch && filenameMatch[1]) {
+      return filenameMatch[1].replace(/['"]/g, "");
+    }
+  }
+  return "download";
 };
 
 export default api;

@@ -1,9 +1,15 @@
 import React, { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
-import { scriptsAPI, authAPI } from "../services/api";
+import { Link, useNavigate } from "react-router-dom";
+import {
+  scriptsAPI,
+  authAPI,
+  downloadBlob,
+  getFilenameFromResponse,
+} from "../services/api";
 import toast from "react-hot-toast";
 
 const DashboardPage = () => {
+  const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [dashboardData, setDashboardData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -18,19 +24,49 @@ const DashboardPage = () => {
     website: "",
   });
 
+  // History tab states
+  const [scripts, setScripts] = useState([]);
+  const [totalScripts, setTotalScripts] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [loadingScripts, setLoadingScripts] = useState(false);
+  const [selectedScripts, setSelectedScripts] = useState([]);
+
+  // Settings tab states
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [passwordData, setPasswordData] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
+
+  // User stats
+  const [userStats, setUserStats] = useState(null);
+
   useEffect(() => {
     fetchData();
   }, []);
 
+  useEffect(() => {
+    if (activeTab === "history") {
+      fetchScripts();
+    }
+  }, [activeTab, currentPage, searchTerm, statusFilter]);
+
   const fetchData = async () => {
     try {
-      const [userResponse, dashboardResponse] = await Promise.all([
-        authAPI.getProfile(),
-        scriptsAPI.getDashboard(),
-      ]);
+      const [userResponse, dashboardResponse, statsResponse] =
+        await Promise.all([
+          authAPI.getProfile(),
+          scriptsAPI.getDashboard(),
+          authAPI.getStats(),
+        ]);
 
       setUser(userResponse.data);
       setDashboardData(dashboardResponse.data);
+      setUserStats(statsResponse.data);
       setProfileData({
         username: userResponse.data.username || "",
         email: userResponse.data.email || "",
@@ -46,6 +82,29 @@ const DashboardPage = () => {
     }
   };
 
+  const fetchScripts = async () => {
+    setLoadingScripts(true);
+    try {
+      const params = {
+        skip: (currentPage - 1) * 10,
+        limit: 10,
+        search: searchTerm || undefined,
+        status: statusFilter || undefined,
+        sort_by: "created_at",
+        sort_order: "desc",
+      };
+
+      const response = await scriptsAPI.getList(params);
+      setScripts(response.data.scripts);
+      setTotalScripts(response.data.total);
+      setTotalPages(response.data.pages);
+    } catch (error) {
+      toast.error("Failed to load scripts");
+    } finally {
+      setLoadingScripts(false);
+    }
+  };
+
   const handleProfileUpdate = async () => {
     try {
       await authAPI.updateProfile(profileData);
@@ -53,7 +112,111 @@ const DashboardPage = () => {
       setProfileEdit(false);
       fetchData();
     } catch (error) {
-      toast.error("Failed to update profile");
+      toast.error(error.response?.data?.detail || "Failed to update profile");
+    }
+  };
+
+  const handlePasswordChange = async () => {
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      toast.error("Passwords do not match");
+      return;
+    }
+
+    if (passwordData.newPassword.length < 8) {
+      toast.error("Password must be at least 8 characters long");
+      return;
+    }
+
+    try {
+      await authAPI.changePassword({
+        current_password: passwordData.currentPassword,
+        new_password: passwordData.newPassword,
+      });
+      toast.success("Password changed successfully");
+      setShowPasswordModal(false);
+      setPasswordData({
+        currentPassword: "",
+        newPassword: "",
+        confirmPassword: "",
+      });
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to change password");
+    }
+  };
+
+  const handleExportData = async () => {
+    try {
+      const format = prompt(
+        "Select export format: json, csv, excel, txt",
+        "json"
+      );
+      if (!format) return;
+
+      const response = await scriptsAPI.export({
+        format: format,
+        script_ids: selectedScripts.length > 0 ? selectedScripts : null,
+      });
+
+      const filename = getFilenameFromResponse(response) || `export.${format}`;
+      downloadBlob(response.data, filename);
+      toast.success("Export started successfully");
+    } catch (error) {
+      toast.error("Failed to export data");
+    }
+  };
+
+  const handleViewAllScripts = () => {
+    setActiveTab("history");
+  };
+
+  const handleDownloadScript = async (scriptId, format = "txt") => {
+    try {
+      const response = await scriptsAPI.download(scriptId, format);
+      const filename =
+        getFilenameFromResponse(response) || `script_${scriptId}.${format}`;
+      downloadBlob(response.data, filename);
+      toast.success("Download started");
+    } catch (error) {
+      toast.error("Failed to download script");
+    }
+  };
+
+  const handleDeleteScript = async (scriptId) => {
+    if (!window.confirm("Are you sure you want to delete this script?")) return;
+
+    try {
+      await scriptsAPI.delete(scriptId);
+      toast.success("Script deleted successfully");
+      fetchScripts();
+      fetchData(); // Refresh dashboard stats
+    } catch (error) {
+      toast.error("Failed to delete script");
+    }
+  };
+
+  const handleRegenerateScript = async (scriptId) => {
+    try {
+      const response = await scriptsAPI.regenerate(scriptId);
+      toast.success("Script queued for regeneration");
+      fetchScripts();
+    } catch (error) {
+      toast.error("Failed to regenerate script");
+    }
+  };
+
+  const handleSelectScript = (scriptId) => {
+    setSelectedScripts((prev) =>
+      prev.includes(scriptId)
+        ? prev.filter((id) => id !== scriptId)
+        : [...prev, scriptId]
+    );
+  };
+
+  const handleSelectAllScripts = () => {
+    if (selectedScripts.length === scripts.length) {
+      setSelectedScripts([]);
+    } else {
+      setSelectedScripts(scripts.map((s) => s.id));
     }
   };
 
@@ -68,6 +231,7 @@ const DashboardPage = () => {
       completed: "bg-green-100 text-green-800",
       processing: "bg-yellow-100 text-yellow-800",
       failed: "bg-red-100 text-red-800",
+      pending: "bg-gray-100 text-gray-800",
     };
     return badges[status] || "bg-gray-100 text-gray-800";
   };
@@ -264,7 +428,9 @@ const DashboardPage = () => {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Storage Used</span>
-                    <span className="font-medium text-gray-900">2.4 GB</span>
+                    <span className="font-medium text-gray-900">
+                      {dashboardData?.storage_used_gb || 0} GB
+                    </span>
                   </div>
                 </div>
               </div>
@@ -313,7 +479,7 @@ const DashboardPage = () => {
                       </div>
                     </div>
                     <p className="text-xs text-gray-500 mt-2">
-                      +12% from last month
+                      {userStats?.success_rate || 0}% success rate
                     </p>
                   </div>
 
@@ -344,7 +510,7 @@ const DashboardPage = () => {
                       </div>
                     </div>
                     <p className="text-xs text-gray-500 mt-2">
-                      23.5 hours this week
+                      {userStats?.total_duration_hours || 0} hours total
                     </p>
                   </div>
 
@@ -386,7 +552,7 @@ const DashboardPage = () => {
                           Time Saved
                         </p>
                         <p className="text-2xl font-bold text-gray-900 mt-1">
-                          142h
+                          {Math.round(dashboardData?.time_saved_hours || 0)}h
                         </p>
                       </div>
                       <div className="bg-yellow-50 p-3 rounded-lg">
@@ -437,7 +603,7 @@ const DashboardPage = () => {
                       Generate New Script
                     </Link>
                     <button
-                      onClick={() => setActiveTab("history")}
+                      onClick={handleViewAllScripts}
                       className="flex items-center justify-center px-4 py-3 bg-white text-gray-700 rounded-lg border-2 border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-all"
                     >
                       <svg
@@ -455,7 +621,10 @@ const DashboardPage = () => {
                       </svg>
                       View All Scripts
                     </button>
-                    <button className="flex items-center justify-center px-4 py-3 bg-white text-gray-700 rounded-lg border-2 border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-all">
+                    <button
+                      onClick={handleExportData}
+                      className="flex items-center justify-center px-4 py-3 bg-white text-gray-700 rounded-lg border-2 border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-all"
+                    >
                       <svg
                         className="w-5 h-5 mr-2"
                         fill="none"
@@ -481,7 +650,10 @@ const DashboardPage = () => {
                       <h2 className="text-lg font-semibold text-gray-900">
                         Recent Scripts
                       </h2>
-                      <button className="text-sm text-blue-600 hover:text-blue-700">
+                      <button
+                        onClick={handleViewAllScripts}
+                        className="text-sm text-blue-600 hover:text-blue-700"
+                      >
                         View all →
                       </button>
                     </div>
@@ -532,12 +704,24 @@ const DashboardPage = () => {
                                 </span>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                <button className="text-blue-600 hover:text-blue-900 mr-3">
+                                <button
+                                  onClick={() =>
+                                    navigate(`/scripts/${script.id}`)
+                                  }
+                                  className="text-blue-600 hover:text-blue-900 mr-3"
+                                >
                                   View
                                 </button>
-                                <button className="text-gray-600 hover:text-gray-900">
-                                  Download
-                                </button>
+                                {script.status === "completed" && (
+                                  <button
+                                    onClick={() =>
+                                      handleDownloadScript(script.id)
+                                    }
+                                    className="text-gray-600 hover:text-gray-900"
+                                  >
+                                    Download
+                                  </button>
+                                )}
                               </td>
                             </tr>
                           ))}
@@ -582,34 +766,38 @@ const DashboardPage = () => {
                       <div>
                         <div className="flex justify-between text-sm mb-1">
                           <span className="text-gray-600">Storage</span>
-                          <span className="font-medium">2.4/10 GB</span>
+                          <span className="font-medium">
+                            {dashboardData?.storage_used_gb || 0}/10 GB
+                          </span>
                         </div>
                         <div className="w-full bg-gray-200 rounded-full h-2">
                           <div
                             className="bg-purple-600 h-2 rounded-full transition-all duration-500"
-                            style={{ width: "24%" }}
+                            style={{
+                              width: `${
+                                ((dashboardData?.storage_used_gb || 0) / 10) *
+                                100
+                              }%`,
+                            }}
                           ></div>
                         </div>
                       </div>
 
                       <div className="pt-4 mt-4 border-t">
                         <h4 className="text-sm font-medium text-gray-900 mb-3">
-                          By Format
+                          Monthly Trend
                         </h4>
-                        <div className="space-y-2">
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-600">TXT</span>
-                            <span className="font-medium">67%</span>
+                        {userStats?.monthly_stats?.map((stat, idx) => (
+                          <div
+                            key={idx}
+                            className="flex justify-between text-sm mb-2"
+                          >
+                            <span className="text-gray-600">{stat.month}</span>
+                            <span className="font-medium">
+                              {stat.count} scripts
+                            </span>
                           </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-600">JSON</span>
-                            <span className="font-medium">23%</span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-600">Excel</span>
-                            <span className="font-medium">10%</span>
-                          </div>
-                        </div>
+                        ))}
                       </div>
                     </div>
                   </div>
@@ -625,28 +813,212 @@ const DashboardPage = () => {
                   </h2>
                 </div>
                 <div className="p-6">
-                  <div className="mb-4 flex justify-between items-center">
-                    <div className="flex space-x-4">
+                  <div className="mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div className="flex flex-col sm:flex-row gap-4 flex-1">
                       <input
                         type="text"
                         placeholder="Search scripts..."
+                        value={searchTerm}
+                        onChange={(e) => {
+                          setSearchTerm(e.target.value);
+                          setCurrentPage(1);
+                        }}
                         className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
-                      <select className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <option>All Status</option>
-                        <option>Completed</option>
-                        <option>Processing</option>
-                        <option>Failed</option>
+                      <select
+                        value={statusFilter}
+                        onChange={(e) => {
+                          setStatusFilter(e.target.value);
+                          setCurrentPage(1);
+                        }}
+                        className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">All Status</option>
+                        <option value="completed">Completed</option>
+                        <option value="processing">Processing</option>
+                        <option value="failed">Failed</option>
+                        <option value="pending">Pending</option>
                       </select>
                     </div>
-                    <button className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200">
-                      Export All
+                    <button
+                      onClick={handleExportData}
+                      disabled={selectedScripts.length === 0}
+                      className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Export{" "}
+                      {selectedScripts.length > 0
+                        ? `(${selectedScripts.length})`
+                        : "All"}
                     </button>
                   </div>
-                  <p className="text-gray-600">
-                    Your complete transcription history with advanced filtering
-                    options.
-                  </p>
+
+                  {loadingScripts ? (
+                    <div className="text-center py-8">
+                      <div className="loading-dots text-gray-600">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                      </div>
+                    </div>
+                  ) : scripts.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      No scripts found
+                    </div>
+                  ) : (
+                    <>
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-6 py-3 text-left">
+                                <input
+                                  type="checkbox"
+                                  checked={
+                                    selectedScripts.length === scripts.length &&
+                                    scripts.length > 0
+                                  }
+                                  onChange={handleSelectAllScripts}
+                                  className="rounded border-gray-300"
+                                />
+                              </th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Video Title
+                              </th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Duration
+                              </th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Created
+                              </th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Status
+                              </th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Actions
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {scripts.map((script) => (
+                              <tr key={script.id} className="hover:bg-gray-50">
+                                <td className="px-6 py-4">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedScripts.includes(
+                                      script.id
+                                    )}
+                                    onChange={() =>
+                                      handleSelectScript(script.id)
+                                    }
+                                    className="rounded border-gray-300"
+                                  />
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <div className="text-sm font-medium text-gray-900">
+                                    {script.video_title || "Untitled"}
+                                  </div>
+                                  <div className="text-xs text-gray-500">
+                                    {script.video_url}
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                  {formatDuration(script.video_duration || 0)}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                  {new Date(
+                                    script.created_at
+                                  ).toLocaleDateString()}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <span
+                                    className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusBadge(
+                                      script.status
+                                    )}`}
+                                  >
+                                    {script.status}
+                                  </span>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                  <div className="flex items-center space-x-3">
+                                    <button
+                                      onClick={() =>
+                                        navigate(`/scripts/${script.id}`)
+                                      }
+                                      className="text-blue-600 hover:text-blue-900"
+                                    >
+                                      View
+                                    </button>
+                                    {script.status === "completed" && (
+                                      <button
+                                        onClick={() =>
+                                          handleDownloadScript(script.id)
+                                        }
+                                        className="text-gray-600 hover:text-gray-900"
+                                      >
+                                        Download
+                                      </button>
+                                    )}
+                                    {script.status === "failed" && (
+                                      <button
+                                        onClick={() =>
+                                          handleRegenerateScript(script.id)
+                                        }
+                                        className="text-yellow-600 hover:text-yellow-900"
+                                      >
+                                        Retry
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={() =>
+                                        handleDeleteScript(script.id)
+                                      }
+                                      className="text-red-600 hover:text-red-900"
+                                    >
+                                      Delete
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Pagination */}
+                      <div className="mt-4 flex justify-between items-center">
+                        <div className="text-sm text-gray-700">
+                          Showing {(currentPage - 1) * 10 + 1} to{" "}
+                          {Math.min(currentPage * 10, totalScripts)} of{" "}
+                          {totalScripts} results
+                        </div>
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() =>
+                              setCurrentPage((prev) => Math.max(1, prev - 1))
+                            }
+                            disabled={currentPage === 1}
+                            className="px-3 py-1 border border-gray-300 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                          >
+                            Previous
+                          </button>
+                          <span className="px-3 py-1">
+                            Page {currentPage} of {totalPages}
+                          </span>
+                          <button
+                            onClick={() =>
+                              setCurrentPage((prev) =>
+                                Math.min(totalPages, prev + 1)
+                              )
+                            }
+                            disabled={currentPage === totalPages}
+                            className="px-3 py-1 border border-gray-300 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                          >
+                            Next
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             )}
@@ -783,6 +1155,38 @@ const DashboardPage = () => {
                       </button>
                     </div>
                   )}
+
+                  <div className="mt-8 pt-8 border-t">
+                    <h3 className="text-lg font-medium text-gray-900 mb-4">
+                      Account Statistics
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="bg-gray-50 rounded-lg p-4">
+                        <p className="text-sm text-gray-600">Member Since</p>
+                        <p className="text-lg font-medium text-gray-900">
+                          {userStats?.member_since}
+                        </p>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg p-4">
+                        <p className="text-sm text-gray-600">Account Type</p>
+                        <p className="text-lg font-medium text-gray-900">
+                          {userStats?.account_type}
+                        </p>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg p-4">
+                        <p className="text-sm text-gray-600">Total Scripts</p>
+                        <p className="text-lg font-medium text-gray-900">
+                          {userStats?.total_scripts}
+                        </p>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg p-4">
+                        <p className="text-sm text-gray-600">Success Rate</p>
+                        <p className="text-lg font-medium text-gray-900">
+                          {userStats?.success_rate}%
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -846,6 +1250,7 @@ const DashboardPage = () => {
                             <option>TXT</option>
                             <option>JSON</option>
                             <option>Excel</option>
+                            <option>CSV</option>
                           </select>
                         </div>
                         <div>
@@ -866,7 +1271,10 @@ const DashboardPage = () => {
                         Security
                       </h3>
                       <div className="space-y-4">
-                        <button className="text-blue-600 hover:text-blue-700 text-sm font-medium">
+                        <button
+                          onClick={() => setShowPasswordModal(true)}
+                          className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                        >
                           Change Password
                         </button>
                         <div>
@@ -890,7 +1298,29 @@ const DashboardPage = () => {
                     Once you delete your account, there is no going back. Please
                     be certain.
                   </p>
-                  <button className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition duration-200 text-sm">
+                  <button
+                    onClick={() => {
+                      const password = prompt(
+                        "Please enter your password to confirm account deletion:"
+                      );
+                      if (password) {
+                        authAPI
+                          .deleteAccount(password)
+                          .then(() => {
+                            toast.success("Account deleted successfully");
+                            localStorage.removeItem("token");
+                            navigate("/");
+                          })
+                          .catch((error) => {
+                            toast.error(
+                              error.response?.data?.detail ||
+                                "Failed to delete account"
+                            );
+                          });
+                      }
+                    }}
+                    className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition duration-200 text-sm"
+                  >
                     Delete Account
                   </button>
                 </div>
@@ -966,7 +1396,9 @@ const DashboardPage = () => {
                               <span className="text-gray-600">
                                 Member since
                               </span>
-                              <span className="font-medium">June 20, 2025</span>
+                              <span className="font-medium">
+                                {userStats?.member_since}
+                              </span>
                             </div>
                           </div>
                         </div>
@@ -984,39 +1416,69 @@ const DashboardPage = () => {
 
                     <div className="mt-8 pt-8 border-t">
                       <h3 className="text-lg font-medium text-gray-900 mb-4">
-                        Billing History
+                        Features Comparison
                       </h3>
                       <div className="overflow-x-auto">
                         <table className="w-full">
                           <thead>
                             <tr className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              <th className="pb-3">Date</th>
-                              <th className="pb-3">Description</th>
-                              <th className="pb-3">Amount</th>
-                              <th className="pb-3">Status</th>
-                              <th className="pb-3">Invoice</th>
+                              <th className="pb-3">Feature</th>
+                              <th className="pb-3">Free</th>
+                              <th className="pb-3">Pro</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-200">
                             <tr>
                               <td className="py-3 text-sm text-gray-900">
-                                Jun 20, 2025
+                                Daily Transcriptions
+                              </td>
+                              <td className="py-3 text-sm text-gray-600">5</td>
+                              <td className="py-3 text-sm text-gray-600">
+                                Unlimited
+                              </td>
+                            </tr>
+                            <tr>
+                              <td className="py-3 text-sm text-gray-900">
+                                Export Formats
                               </td>
                               <td className="py-3 text-sm text-gray-600">
-                                Pro Plan - Monthly
+                                TXT only
                               </td>
+                              <td className="py-3 text-sm text-gray-600">
+                                All formats
+                              </td>
+                            </tr>
+                            <tr>
                               <td className="py-3 text-sm text-gray-900">
-                                $19.00
+                                Processing Speed
                               </td>
-                              <td className="py-3">
-                                <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                                  Paid
-                                </span>
+                              <td className="py-3 text-sm text-gray-600">
+                                Standard
                               </td>
-                              <td className="py-3 text-sm">
-                                <button className="text-blue-600 hover:text-blue-700">
-                                  Download
-                                </button>
+                              <td className="py-3 text-sm text-gray-600">
+                                Priority
+                              </td>
+                            </tr>
+                            <tr>
+                              <td className="py-3 text-sm text-gray-900">
+                                Storage
+                              </td>
+                              <td className="py-3 text-sm text-gray-600">
+                                1 GB
+                              </td>
+                              <td className="py-3 text-sm text-gray-600">
+                                10 GB
+                              </td>
+                            </tr>
+                            <tr>
+                              <td className="py-3 text-sm text-gray-900">
+                                Support
+                              </td>
+                              <td className="py-3 text-sm text-gray-600">
+                                Community
+                              </td>
+                              <td className="py-3 text-sm text-gray-600">
+                                Priority Email
                               </td>
                             </tr>
                           </tbody>
@@ -1030,6 +1492,88 @@ const DashboardPage = () => {
           </div>
         </div>
       </div>
+
+      {/* Password Change Modal */}
+      {showPasswordModal && (
+        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-md w-full p-6">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">
+              Change Password
+            </h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Current Password
+                </label>
+                <input
+                  type="password"
+                  value={passwordData.currentPassword}
+                  onChange={(e) =>
+                    setPasswordData({
+                      ...passwordData,
+                      currentPassword: e.target.value,
+                    })
+                  }
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  New Password
+                </label>
+                <input
+                  type="password"
+                  value={passwordData.newPassword}
+                  onChange={(e) =>
+                    setPasswordData({
+                      ...passwordData,
+                      newPassword: e.target.value,
+                    })
+                  }
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Confirm New Password
+                </label>
+                <input
+                  type="password"
+                  value={passwordData.confirmPassword}
+                  onChange={(e) =>
+                    setPasswordData({
+                      ...passwordData,
+                      confirmPassword: e.target.value,
+                    })
+                  }
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end space-x-4">
+              <button
+                onClick={() => {
+                  setShowPasswordModal(false);
+                  setPasswordData({
+                    currentPassword: "",
+                    newPassword: "",
+                    confirmPassword: "",
+                  });
+                }}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handlePasswordChange}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Change Password
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

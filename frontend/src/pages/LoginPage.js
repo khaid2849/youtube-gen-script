@@ -23,9 +23,9 @@ const LoginPage = () => {
     setLoading(true);
 
     try {
-      // OAuth2PasswordRequestForm expects username field
-      const loginData = new URLSearchParams();
-      loginData.append("username", formData.email);
+      // OAuth2PasswordRequestForm expects form data, not JSON
+      const loginData = new FormData();
+      loginData.append("username", formData.email); // OAuth2 expects 'username' field
       loginData.append("password", formData.password);
 
       const response = await authAPI.login(loginData);
@@ -33,28 +33,7 @@ const LoginPage = () => {
       toast.success("Login successful!");
       navigate("/dashboard");
     } catch (error) {
-      console.error("Login error:", error.response?.data);
-
-      // Handle different error formats
-      let errorMessage = "Login failed";
-
-      if (error.response?.data?.detail) {
-        // If detail is a string
-        if (typeof error.response.data.detail === "string") {
-          errorMessage = error.response.data.detail;
-        }
-        // If detail is an array of validation errors
-        else if (Array.isArray(error.response.data.detail)) {
-          errorMessage =
-            error.response.data.detail[0]?.msg || "Validation error";
-        }
-        // If detail is an object
-        else if (typeof error.response.data.detail === "object") {
-          errorMessage = error.response.data.detail.msg || "Login failed";
-        }
-      }
-
-      toast.error(errorMessage);
+      toast.error(error.response?.data?.detail || "Login failed");
     } finally {
       setLoading(false);
     }
