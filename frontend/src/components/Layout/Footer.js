@@ -157,13 +157,13 @@ const Footer = () => {
         <div className="mt-8 pt-8 border-t border-gray-800">
           <div className="flex flex-col md:flex-row justify-between items-center">
             <p className="text-sm mb-4 md:mb-0">
-              © {currentYear} ScriptGen. All rights reserved.
+              © {currentYear} Khaid. All rights reserved.
             </p>
 
             <div className="flex items-center space-x-6">
               {/* Social Icons */}
               <a
-                href="https://linkedin.com"
+                href="https://www.linkedin.com/in/khaid284"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="hover:text-white transition duration-200"
@@ -178,7 +178,7 @@ const Footer = () => {
                 </svg>
               </a>
               <a
-                href="https://github.com"
+                href="https://github.com/khaid2849"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="hover:text-white transition duration-200"
@@ -193,22 +193,19 @@ const Footer = () => {
                 </svg>
               </a>
               <a
-                href="https://twitter.com"
+                href="https://www.facebook.com/dangkhi"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="hover:text-white transition duration-200"
-                aria-label="Twitter"
+                aria-label="Facebook"
               >
-                <svg
-                  className="w-5 h-5"
-                  fill="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path d="M23.953 4.57a10 10 0 01-2.825.775 4.958 4.958 0 002.163-2.723c-.951.555-2.005.959-3.127 1.184a4.92 4.92 0 00-8.384 4.482C7.69 8.095 4.067 6.13 1.64 3.162a4.822 4.822 0 00-.666 2.475c0 1.71.87 3.213 2.188 4.096a4.904 4.904 0 01-2.228-.616v.06a4.923 4.923 0 003.946 4.827 4.996 4.996 0 01-2.212.085 4.936 4.936 0 004.604 3.417 9.867 9.867 0 01-6.102 2.105c-.39 0-.779-.023-1.17-.067a13.995 13.995 0 007.557 2.209c9.053 0 13.998-7.496 13.998-13.985 0-.21 0-.42-.015-.63A9.935 9.935 0 0024 4.59z" />
-                </svg>
+              <svg width="24px" height="24px" viewBox="0 0 24 24" role="img" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
+                <title>Facebook icon</title>
+                <path d="M23.9981 11.9991C23.9981 5.37216 18.626 0 11.9991 0C5.37216 0 0 5.37216 0 11.9991C0 17.9882 4.38789 22.9522 10.1242 23.8524V15.4676H7.07758V11.9991H10.1242V9.35553C10.1242 6.34826 11.9156 4.68714 14.6564 4.68714C15.9692 4.68714 17.3424 4.92149 17.3424 4.92149V7.87439H15.8294C14.3388 7.87439 13.8739 8.79933 13.8739 9.74824V11.9991H17.2018L16.6698 15.4676H13.8739V23.8524C19.6103 22.9522 23.9981 17.9882 23.9981 11.9991Z"/>
+              </svg>
               </a>
               <a
-                href="https://instagram.com"
+                href="https://www.instagram.com/khaii.dd"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="hover:text-white transition duration-200"
